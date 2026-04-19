@@ -576,7 +576,8 @@ def tam_analiz(kod: str, quarters: dict, donems: list) -> dict:
     risk  = risk_analizi(row, yd)
     karar = nihai_karar(yd, uc_p, fiyat, risk)
 
-    firsat = firsat_skoru(row, yd, quarters, donems, kod)
+    firsat  = firsat_skoru(row, yd, quarters, donems, kod)
+    sektor_d = sektor_degerleme(row, quarters, donems, kod)
 
     return {
         "kod": kod,
@@ -588,6 +589,7 @@ def tam_analiz(kod: str, quarters: dict, donems: list) -> dict:
         "risk": risk,
         "karar": karar,
         "firsat": firsat,
+        "sektor_d": sektor_d,
     }
 
 
@@ -692,4 +694,247 @@ def firsat_skoru(row: dict, yd: dict, quarters: dict, donems: list, kod: str) ->
         "sinyaller": sinyaller,
         "renk": renk,
         "seviye": "GUCLU FIRSAT" if puan >= 4 else "FIRSAT" if puan >= 2 else "NORMAL"
+    }
+
+
+# ── SEKTÖR SINIFLANDIRMASI ────────────────────────────────────────────────────
+def sektor_grubu(sektor: str) -> str:
+    s = (sektor or "").lower()
+    if any(x in s for x in ["banka", "katılım"]):                   return "BANKA"
+    if "sigorta" in s:                                               return "SIGORTA"
+    if any(x in s for x in ["gayrimenkul yat", "gyyo", "gyo"]):    return "GYO"
+    if "holding" in s:                                               return "HOLDING"
+    if any(x in s for x in ["girişim", "menkul kıymet", "yatırım şirket", "varlık yönet", "aracı"]):
+        return "YATIRIM"
+    if any(x in s for x in ["enerji", "petrol", "doğalgaz"]):      return "ENERJI"
+    if any(x in s for x in ["ilaç", "sağlık"]):                    return "ILAC"
+    if any(x in s for x in ["bilişim", "yazılım", "teknoloji"]):   return "TEKNOLOJI"
+    if any(x in s for x in ["perakende", "toptan"]):               return "PERAKENDE"
+    if any(x in s for x in ["spor", "eğlence"]):                   return "SPOR"
+    return "DIGER"
+
+
+SEKTOR_META = {
+    "BANKA":     {"label": "Banka",          "model": "PD/DD + ROE",   "emoji": "🏦",
+                  "acik": "Banka & finansal kurum. Damodaran: EFK yerine ozsermaye karliligi. Anahtar: PD/DD × ROE teorik deger."},
+    "SIGORTA":   {"label": "Sigorta",         "model": "F/K",           "emoji": "🛡️",
+                  "acik": "Sigorta sirketi. Damodaran: F/K ve PD/DD birlikte. Provizyon ayirmalar EFK'yi bozar."},
+    "GYO":       {"label": "GYO/GYYO",        "model": "PD/DD",         "emoji": "🏗️",
+                  "acik": "Gayrimenkul yatirim ortakligi. Damodaran: Varlik bazli degerleme. PD/DD < 0.8 ucuz."},
+    "HOLDING":   {"label": "Holding",         "model": "PD/DD (NAV)",   "emoji": "🏛️",
+                  "acik": "Holding sirketi. Damodaran: Net Varlik Degeri (NAV) yaklasimi. Portfoy degeri vs PD."},
+    "YATIRIM":   {"label": "Yatirim Sirketi", "model": "PD/DD",         "emoji": "📊",
+                  "acik": "Yatirim/GYO/Menkul. Damodaran: Defter degerine gore fiyatlama. ROE kriteri."},
+    "ENERJI":    {"label": "Enerji",          "model": "FV/FAVOK",      "emoji": "⚡",
+                  "acik": "Enerji sirketi. Damodaran: EV/EBITDA ve nakit akisi odakli. Sermaye yogun."},
+    "ILAC":      {"label": "Ilac/Saglik",     "model": "DCF + Pipeline","emoji": "💊",
+                  "acik": "Ilac/saghk sirketi. Damodaran: Urün boru hatti risk ayarli NPV ile degerler."},
+    "TEKNOLOJI": {"label": "Teknoloji",       "model": "EV/Satis + PEG","emoji": "💻",
+                  "acik": "Teknoloji/Yazilim. Damodaran: Buyume odakli. EV/Satis ve PEG on planda."},
+    "PERAKENDE": {"label": "Perakende",       "model": "PD/Satis + Marj","emoji": "🛒",
+                  "acik": "Perakende/Toptan. Damodaran: Satis buyumesi ve kar marji kritik. PD/Satis."},
+    "SPOR":      {"label": "Spor/Eglence",    "model": "PD/Satis",      "emoji": "⚽",
+                  "acik": "Spor kulubu. EFK anlamsiz. Marka degeri ve taraftar tabanina gore fiyatlanir."},
+    "DIGER":     {"label": "Diger Sektorler", "model": "DCF",           "emoji": "🏭",
+                  "acik": "Standart sanayi/imalat. Damodaran: DCF + FV/FAVOK ana metrik."},
+}
+
+
+def sektor_degerleme(row: dict, quarters: dict, donems: list, kod: str) -> dict:
+    """
+    Damodaran Sektore Ozel Degerleme
+    Her sektör icin dogru metrik hesapla + ucuz/pahali tespit et
+    """
+    sektor = row.get(C_SEKTOR, "")
+    grup   = sektor_grubu(sektor)
+    meta   = SEKTOR_META.get(grup, SEKTOR_META["DIGER"])
+
+    pd_val   = hesapla_pd(row)
+    ozk      = safe_float(row.get(C_OZKAYNAK, ""))
+    roe      = safe_float(row.get(C_ROE, ""))
+    nk       = safe_float(row.get(C_NK, ""))
+    favok    = safe_float(row.get(C_FAVOK, ""))
+    ns       = safe_float(row.get(C_NS, ""))
+    pddd     = safe_float(row.get(C_PDDD, ""))
+    fv_favok = safe_float(row.get(C_FV_FAVOK, ""))
+    peg      = safe_float(row.get(C_PEG, ""))
+    roic     = safe_float(row.get(C_ROIC, ""))
+    fv_ns    = safe_float(row.get(C_FV_NS, ""))
+
+    karar = None
+    renk  = "#94A3B8"
+    metrik_adi = meta["model"]
+    metrik_val = None
+    detay = ""
+
+    ozk_maliyeti = RISKSIZ_FAIZ * 100 + PIYASA_PRM * 100 + ULKE_RISK_PRM * 100
+
+    # ── BANKA ────────────────────────────────────────────────────────────────
+    if grup == "BANKA":
+        metrik_adi = "PD/DD"
+        metrik_val = pddd
+        if pddd and roe:
+            teorik = (roe / ozk_maliyeti) if ozk_maliyeti > 0 else None
+            if teorik:
+                sapma = (pddd - teorik) / teorik * 100
+                if sapma < -20:
+                    karar, renk = "UCUZ", "#4ADE80"
+                    detay = f"PD/DD {pddd:.2f}x, teorik {teorik:.2f}x — %{abs(sapma):.0f} iskontolu"
+                elif sapma > 30:
+                    karar, renk = "PAHALI", "#F87171"
+                    detay = f"PD/DD {pddd:.2f}x, teorik {teorik:.2f}x — %{sapma:.0f} primli"
+                else:
+                    karar, renk = "ADIL", "#FCD34D"
+                    detay = f"PD/DD {pddd:.2f}x teorige yakin"
+
+    # ── SIGORTA ──────────────────────────────────────────────────────────────
+    elif grup == "SIGORTA":
+        metrik_adi = "PD/DD + F/K"
+        metrik_val = pddd
+        if pddd and roe:
+            teorik = (roe / ozk_maliyeti) if ozk_maliyeti > 0 else None
+            if teorik and pddd < teorik * 0.8:
+                karar, renk = "UCUZ", "#4ADE80"
+                detay = f"PD/DD {pddd:.2f}x teorik alti — ROE %{roe:.0f}"
+            elif teorik and pddd > teorik * 1.3:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"PD/DD {pddd:.2f}x teorik ustu — ROE %{roe:.0f}"
+            else:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"PD/DD {pddd:.2f}x, ROE %{roe:.0f}"
+
+    # ── GYO ──────────────────────────────────────────────────────────────────
+    elif grup == "GYO":
+        metrik_adi = "PD/DD"
+        metrik_val = pddd
+        if pddd:
+            if pddd < 0.7:
+                karar, renk = "UCUZ", "#4ADE80"
+                detay = f"PD/DD {pddd:.2f}x — defter degerinin altinda"
+            elif pddd < 1.2:
+                karar, renk = "MAKUL", "#86EFAC"
+                detay = f"PD/DD {pddd:.2f}x — makul fiyat"
+            elif pddd < 2.0:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"PD/DD {pddd:.2f}x — prim odeniyor"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"PD/DD {pddd:.2f}x — yuksek prim"
+
+    # ── HOLDING ──────────────────────────────────────────────────────────────
+    elif grup == "HOLDING":
+        # NAV proxy: Ozkaynaklar = holding net varlik degeri tahmini
+        metrik_adi = "PD/DD (NAV)"
+        metrik_val = pddd
+        if pddd:
+            if pddd < 0.6:
+                karar, renk = "DERIN ISKONTO", "#4ADE80"
+                detay = f"PD/DD {pddd:.2f}x — NAV'a %{(1-pddd)*100:.0f} iskonto"
+            elif pddd < 1.0:
+                karar, renk = "ISKONTO", "#86EFAC"
+                detay = f"PD/DD {pddd:.2f}x — NAV altinda islem"
+            elif pddd < 1.5:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"PD/DD {pddd:.2f}x — NAV'a yakin"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"PD/DD {pddd:.2f}x — NAV ustu prim"
+
+    # ── ENERJI ───────────────────────────────────────────────────────────────
+    elif grup == "ENERJI":
+        metrik_adi = "FV/FAVOK"
+        metrik_val = fv_favok
+        if fv_favok:
+            if fv_favok < 5:
+                karar, renk = "UCUZ", "#4ADE80"
+                detay = f"FV/FAVOK {fv_favok:.1f}x — dusuk"
+            elif fv_favok < 8:
+                karar, renk = "MAKUL", "#86EFAC"
+                detay = f"FV/FAVOK {fv_favok:.1f}x — makul"
+            elif fv_favok < 12:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"FV/FAVOK {fv_favok:.1f}x — piyasa ortalamasi"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"FV/FAVOK {fv_favok:.1f}x — yuksek"
+
+    # ── TEKNOLOJI ────────────────────────────────────────────────────────────
+    elif grup == "TEKNOLOJI":
+        metrik_adi = "FV/Satis"
+        metrik_val = fv_ns
+        if fv_ns and roic:
+            if fv_ns < 1.0 and roic > 10:
+                karar, renk = "GUCLU FIRSAT", "#4ADE80"
+                detay = f"FV/Satis {fv_ns:.2f}x, ROIC %{roic:.0f} — ucuz buyume"
+            elif fv_ns < 2.0:
+                karar, renk = "MAKUL", "#86EFAC"
+                detay = f"FV/Satis {fv_ns:.2f}x"
+            elif fv_ns < 5.0:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"FV/Satis {fv_ns:.2f}x"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"FV/Satis {fv_ns:.2f}x — buyume fiyatlanmis"
+        elif peg:
+            metrik_adi = "PEG"
+            metrik_val = peg
+            if peg < 1.0:
+                karar, renk = "UCUZ", "#4ADE80"
+                detay = f"PEG {peg:.2f} — buyumeye gore ucuz"
+            elif peg < 1.5:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"PEG {peg:.2f}"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"PEG {peg:.2f} — pahali buyume"
+
+    # ── PERAKENDE ────────────────────────────────────────────────────────────
+    elif grup == "PERAKENDE":
+        metrik_adi = "PD/Satis"
+        if pd_val and ns and ns > 0:
+            pd_satis = pd_val / ns
+            metrik_val = round(pd_satis, 2)
+            if pd_satis < 0.3:
+                karar, renk = "UCUZ", "#4ADE80"
+                detay = f"PD/Satis {pd_satis:.2f}x — dusuk"
+            elif pd_satis < 0.7:
+                karar, renk = "MAKUL", "#86EFAC"
+                detay = f"PD/Satis {pd_satis:.2f}x"
+            elif pd_satis < 1.5:
+                karar, renk = "ADIL", "#FCD34D"
+                detay = f"PD/Satis {pd_satis:.2f}x"
+            else:
+                karar, renk = "PAHALI", "#F87171"
+                detay = f"PD/Satis {pd_satis:.2f}x — yuksek"
+
+    # ── YATIRIM/SPOR/DIGER ───────────────────────────────────────────────────
+    elif grup in ["YATIRIM"]:
+        metrik_adi = "PD/DD"
+        metrik_val = pddd
+        if pddd:
+            if pddd < 0.8:   karar, renk = "ISKONTO", "#4ADE80";  detay = f"PD/DD {pddd:.2f}x"
+            elif pddd < 1.5: karar, renk = "ADIL",    "#FCD34D";  detay = f"PD/DD {pddd:.2f}x"
+            else:             karar, renk = "PAHALI",  "#F87171";  detay = f"PD/DD {pddd:.2f}x"
+
+    else:
+        # DIGER — standart FV/FAVOK
+        metrik_adi = "FV/FAVOK"
+        metrik_val = fv_favok
+        if fv_favok:
+            if fv_favok < 5:    karar, renk = "UCUZ",   "#4ADE80"; detay = f"FV/FAVOK {fv_favok:.1f}x"
+            elif fv_favok < 10: karar, renk = "MAKUL",  "#86EFAC"; detay = f"FV/FAVOK {fv_favok:.1f}x"
+            elif fv_favok < 15: karar, renk = "ADIL",   "#FCD34D"; detay = f"FV/FAVOK {fv_favok:.1f}x"
+            else:                karar, renk = "PAHALI", "#F87171"; detay = f"FV/FAVOK {fv_favok:.1f}x"
+
+    return {
+        "grup":       grup,
+        "label":      meta["label"],
+        "emoji":      meta["emoji"],
+        "model":      meta["model"],
+        "acik":       meta["acik"],
+        "metrik_adi": metrik_adi,
+        "metrik_val": metrik_val,
+        "karar":      karar,
+        "renk":       renk,
+        "detay":      detay,
     }

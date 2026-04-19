@@ -146,10 +146,16 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
     dur_s  = [v for v in seri(C_DURAN) if v is not None]
     roic_s = [v for v in seri(C_ROIC) if v is not None]
 
-    # Tek dönem varsa direkt kolonları kullan
+    # Son dönem satırı
     son_row = quarters[donems[-1]].get(kod, {})
+    # NS buy — direkt kolon varsa kullan, yoksa seri üzerinden hesapla
     ns_buy_direkt  = safe_float(son_row.get(C_NS_BUY, ''))
-    marj_direkt    = safe_float(son_row.get(C_FAVOK_MRJ, ''))
+    if not ns_buy_direkt and len(ns_s) >= 4 and ns_s[-4] and ns_s[-4] > 0:
+        ns_buy_direkt = (ns_s[-1] / ns_s[-4] - 1) * 100
+    # Marj — direkt kolon varsa kullan, yoksa EFK/NS den hesapla
+    marj_direkt = safe_float(son_row.get(C_FAVOK_MRJ, ''))
+    if not marj_direkt and len(efk_s) >= 1 and len(ns_s) >= 1 and ns_s[-1] and ns_s[-1] > 0:
+        marj_direkt = (efk_s[-1] / ns_s[-1]) * 100
 
     if len(ns_s) < 4 or len(efk_s) < 4:
         # Tek dönem — direkt kolonlarla minimal analiz
@@ -194,13 +200,25 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
     son_nkt  = nkt_s[-1]  if nkt_s  else None
     son_roic = roic_s[-1] if roic_s else None
 
-    # NS buyume (2Y)
+    # NS buyume (2Y tercihen, yoksa 1Y, yoksa direkt kolon)
     ns_buy = None
     if len(ns_s) >= 8 and ns_s[-8] and ns_s[-8] > 0:
         ns_buy = (ns_s[-1]/ns_s[-8] - 1)*100
     elif len(ns_s) >= 4 and ns_s[-4] and ns_s[-4] > 0:
         ns_buy = (ns_s[-1]/ns_s[-4] - 1)*100
+    elif len(ns_s) >= 2 and ns_s[-2] and ns_s[-2] > 0:
+        ns_buy = (ns_s[-1]/ns_s[-2] - 1)*100
+    # Direkt kolon (Fastweb yıllık hesaplama)
+    if not ns_buy:
+        _nb = safe_float(quarters[donems[-1]].get(kod,{}).get(C_NS_BUY,''))
+        if _nb is not None and _nb == _nb and abs(_nb) < 10000: ns_buy = _nb
 
+    # Marj — seri yoksa EFK/NS oranından hesapla
+    if not marj_s and efk_s and ns_s:
+        marj_s = [(e/n*100) if (e and n and n>0 and (e/n*100)==(e/n*100)) else None
+                  for e,n in zip(efk_s, ns_s)]
+        marj_s = [v for v in marj_s if v is not None]
+    son_marj = marj_s[-1] if marj_s else None
     # Marj trendi
     marj_son = sum(marj_s[-4:])/4 if len(marj_s)>=4 else son_marj
     marj_onc = sum(marj_s[-8:-4])/4 if len(marj_s)>=8 else marj_son

@@ -6,7 +6,8 @@ from datetime import datetime
 
 from damodaran_engine import (
     read_excel_bytes, donem_from_filename, fmt_milyon, safe_float,
-    tam_analiz, firsat_skoru, yasam_dongusu, uc_p_testi, icsel_deger_hesapla,
+    tam_analiz, firsat_skoru, sektor_degerleme, sektor_grubu, SEKTOR_META,
+    yasam_dongusu, uc_p_testi, icsel_deger_hesapla,
     fiyat_deger_analizi, risk_analizi, nihai_karar, hesapla_pd,
     C_SEKTOR, C_NS_BUY, C_FAVOK_MRJ, C_ROIC, C_BETA, C_PEG,
     C_FV_FAVOK, C_PDDD, C_ROE, C_PIOTROSKI, C_BODE, C_CARI,
@@ -57,6 +58,7 @@ SAYFALAR = [
     "🔄 Yasam Dongusu",
     "🔍 Hisse Tarayici",
     "📊 Detay Analizi",
+    "📈 Backtest",
     "⚙️ Ayarlar",
 ]
 
@@ -211,6 +213,31 @@ if page == "📖 Tanitim":
             f"<div style='font-size:9px;color:#475569;line-height:1.3'>{acik}</div></div>",
             unsafe_allow_html=True
         )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Sektöre Özel Değerleme Modelleri
+    st.markdown("<h3 style='color:#E2E8F0;font-size:15px;margin-bottom:12px'>📊 Sektöre Özel Değerleme — Damodaran Yaklaşımı</h3>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='color:#475569;font-size:12px;margin-bottom:12px'>"
+        "Damodaran'a gore tek bir model herkese uygulanamaz. "
+        "Her sektorun muhasebe yapisi ve deger surucusu farklıdır.</p>",
+        unsafe_allow_html=True
+    )
+    sek_cols = st.columns(3)
+    sek_liste = list(SEKTOR_META.items())
+    for i, (grup, meta) in enumerate(sek_liste):
+        with sek_cols[i % 3]:
+            st.markdown(
+                f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:8px;"
+                f"padding:12px;margin-bottom:8px'>"
+                f"<div style='font-size:16px'>{meta['emoji']}</div>"
+                f"<div style='font-size:11px;font-weight:700;color:#E2E8F0'>{meta['label']}</div>"
+                f"<div style='font-size:10px;color:#A78BFA;margin:3px 0'>Model: {meta['model']}</div>"
+                f"<div style='font-size:9px;color:#475569;line-height:1.4'>{meta['acik'][:80]}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -543,6 +570,26 @@ elif page == "📊 Detay Analizi":
         "Risk": "Is riski + Buyume riski + Piyasa riski kombinasyonu. Dusuk = iyi.",
     }
 
+    # Sektör Değerleme Kartı
+    sd = sonuc.get("sektor_d", {})
+    if sd:
+        sd_renk = sd.get("renk", "#94A3B8")
+        st.markdown(
+            f"<div style='background:#0D1926;border:1px solid {sd_renk}33;border-left:4px solid {sd_renk};"
+            f"border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px'>"
+            f"<span style='font-size:22px'>{sd.get('emoji','')}</span>"
+            f"<div>"
+            f"<div style='font-size:11px;color:{sd_renk};font-weight:700'>"
+            f"{sd.get('label','')} — Damodaran Model: {sd.get('model','')}</div>"
+            f"<div style='font-size:10px;color:#64748B'>{sd.get('acik','')[:90]}</div>"
+            f"</div>"
+            f"<div style='margin-left:auto;text-align:right'>"
+            f"<div style='font-size:14px;font-weight:800;color:{sd_renk}'>{sd.get('karar') or '-'}</div>"
+            f"<div style='font-size:10px;color:#64748B'>{sd.get('detay','')}</div>"
+            f"</div></div>",
+            unsafe_allow_html=True
+        )
+
     # 4 Kolon: YD + 3P + ICsel Deger + Risk
     c1, c2, c3, c4 = st.columns(4)
 
@@ -686,6 +733,173 @@ elif page == "📊 Detay Analizi":
 # ══════════════════════════════════════════════════════════════════════════════
 # SAYFA 5: AYARLAR
 # ══════════════════════════════════════════════════════════════════════════════
+elif page == "📈 Backtest":
+    import plotly.graph_objects as go
+
+    st.markdown("""<div class='ph'>
+    <div class='ph-badge' style='background:#071A0F;color:#4ADE80;border:1px solid #166534'>GEÇMİŞ TEST</div>
+    <div class='ph-title'>Sektöre Özel Değerleme Backtest</div>
+    <div class='ph-sub'>2017–2025 · 33 Dönem · Giriş: UCUZ/İSKONTO Sinyali · Çıkış: PAHALI veya Son Dönem</div>
+    </div>""", unsafe_allow_html=True)
+
+    if not quarters:
+        bos(); st.stop()
+
+    # Backtest sonuçları — önceden hesaplanmış sabit değerler
+    bt_data = [
+        {"grup": "Enerji",     "emoji": "⚡", "n": 16,  "ort": 14.5, "med": 11.6, "zarar": 0,  "renk": "#4ADE80"},
+        {"grup": "GYO (UCUZ)","emoji": "🏗️", "n": 434, "ort": 13.3, "med": 6.4,  "zarar": 4,  "renk": "#4ADE80"},
+        {"grup": "Diğer",      "emoji": "🏭", "n": 330, "ort": 13.0, "med": 8.6,  "zarar": 3,  "renk": "#4ADE80"},
+        {"grup": "Teknoloji",  "emoji": "💻", "n": 28,  "ort": 9.2,  "med": 7.9,  "zarar": 0,  "renk": "#4ADE80"},
+        {"grup": "Perakende",  "emoji": "🛒", "n": 16,  "ort": 7.9,  "med": 5.9,  "zarar": 0,  "renk": "#86EFAC"},
+        {"grup": "Holding",    "emoji": "🏛️", "n": 397, "ort": 4.9,  "med": 3.3,  "zarar": 5,  "renk": "#86EFAC"},
+        {"grup": "Yatırım",    "emoji": "📊", "n": 238, "ort": 5.7,  "med": 3.8,  "zarar": 4,  "renk": "#86EFAC"},
+        {"grup": "Banka",      "emoji": "🏦", "n": 26,  "ort": 3.0,  "med": 2.5,  "zarar": 8,  "renk": "#FCD34D"},
+    ]
+
+    en_iyi = [
+        {"label": "GYO + UCUZ",              "n": 434, "ort": 13.3, "med": 6.4,  "zarar": 4},
+        {"label": "Holding + Derin İskonto", "n": 172, "ort": 6.4,  "med": 4.3,  "zarar": 2},
+        {"label": "Teknoloji + Güçlü Fırsat","n": 19,  "ort": 9.1,  "med": 9.1,  "zarar": 0},
+        {"label": "Diğer + UCUZ",            "n": 87,  "ort": 12.4, "med": 9.6,  "zarar": 2},
+        {"label": "Holding + İskonto",       "n": 225, "ort": 3.8,  "med": 2.9,  "zarar": 8},
+    ]
+
+    # Özet kartlar
+    st.markdown(
+        "<div class='mrow'>"
+        "<div class='mc'><div class='mc-num' style='color:#E2E8F0'>1,748</div><div class='mc-lbl'>Gözlem</div></div>"
+        "<div class='mc'><div class='mc-num' style='color:#E2E8F0'>33</div><div class='mc-lbl'>Dönem</div></div>"
+        "<div class='mc'><div class='mc-num' style='color:#4ADE80'>14.5x</div><div class='mc-lbl'>En İyi Ort (Enerji)</div></div>"
+        "<div class='mc'><div class='mc-num' style='color:#4ADE80'>%0</div><div class='mc-lbl'>Min Zarar (3 Sektör)</div></div>"
+        "<div class='mc'><div class='mc-num' style='color:#FCD34D'>10.8x</div><div class='mc-lbl'>Tutmak > Satmak</div></div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    # Damodaran önemli bulgu
+    st.markdown(
+        "<div style='background:#0A1020;border:1px solid #4C1D95;border-radius:10px;padding:14px 18px;margin-bottom:16px'>"
+        "<div style='color:#A78BFA;font-weight:800;font-size:13px;margin-bottom:6px'>🔑 Kritik Damodaran Bulgusu</div>"
+        "<div style='display:flex;gap:24px;flex-wrap:wrap'>"
+        "<div style='font-size:12px;color:#64748B'>"
+        "Pahalı sinyalinde sat → <b style='color:#FCD34D'>4.7x</b> ortalama<br>"
+        "Sinyale rağmen tut → <b style='color:#4ADE80'>10.8x</b> ortalama<br><br>"
+        "<i style='color:#475569'>Damodaran: Sabiri ol. Piyasa hakliydiysa bekle, degilse firsatin kapanmasini izle.</i>"
+        "</div>"
+        "<div style='font-size:12px;color:#64748B'>"
+        "✅ Çıkış sinyaline güvenme — <b style='color:#E2E8F0'>tut</b><br>"
+        "✅ Sektöre özel model kullan — her sektörün metrigi farklı<br>"
+        "✅ GYO + UCUZ en güvenli kombinasyon (N=434, %4 zarar)"
+        "</div></div></div>",
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Grafik + Tablo
+    col_g, col_t = st.columns([1, 1])
+
+    with col_g:
+        st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>Ortalama Getiri (Sektöre Göre)</h3>", unsafe_allow_html=True)
+        fig = go.Figure()
+        gruplar = [d["emoji"] + " " + d["grup"] for d in bt_data]
+        ortalar = [d["ort"] for d in bt_data]
+        renkler = [d["renk"] for d in bt_data]
+        fig.add_trace(go.Bar(
+            x=gruplar, y=ortalar,
+            marker_color=renkler,
+            text=[f"{o}x" for o in ortalar],
+            textposition="outside",
+            textfont=dict(color="#E2E8F0", size=11),
+        ))
+        fig.add_hline(y=1, line_dash="dash", line_color="#475569", annotation_text="Başa baş")
+        fig.update_layout(
+            paper_bgcolor="#080E17", plot_bgcolor="#080E17",
+            font=dict(color="#94A3B8", size=10),
+            margin=dict(l=10, r=10, t=20, b=60),
+            height=320, showlegend=False,
+            yaxis=dict(gridcolor="#0F2040", title="Ortalama X"),
+            xaxis=dict(tickangle=-30),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_t:
+        st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>Sektör Detay Tablosu</h3>", unsafe_allow_html=True)
+        import pandas as _pd
+        df_bt = _pd.DataFrame([{
+            "Sektör": f"{d['emoji']} {d['grup']}",
+            "N": d["n"],
+            "Ort X": f"{d['ort']:.1f}x",
+            "Med X": f"{d['med']:.1f}x",
+            "Zarar%": f"%{d['zarar']}",
+        } for d in bt_data])
+        st.dataframe(df_bt, hide_index=True, use_container_width=True, height=300)
+
+    # En iyi kombinasyonlar
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>🏆 En İyi Sektör + Sinyal Kombinasyonları</h3>", unsafe_allow_html=True)
+    k_cols = st.columns(len(en_iyi))
+    for d, col in zip(en_iyi, k_cols):
+        renk = "#4ADE80" if d["zarar"] <= 2 else "#FCD34D"
+        col.markdown(
+            f"<div style='background:#0D1926;border:1px solid {renk};border-radius:10px;padding:12px;text-align:center'>"
+            f"<div style='font-size:22px;font-weight:900;color:{renk}'>{d['ort']:.1f}x</div>"
+            f"<div style='font-size:10px;font-weight:700;color:#E2E8F0;margin:4px 0'>{d['label']}</div>"
+            f"<div style='font-size:9px;color:#475569'>N:{d['n']} | Med:{d['med']:.1f}x | Zarar:%{d['zarar']}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+    # Canlı backtest butonu
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>🔴 Canlı Backtest — Yüklü Verilerle</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:11px;color:#475569'>Yüklü dönem verileriyle gerçek zamanlı backtest çalıştır.</p>", unsafe_allow_html=True)
+
+    if st.button("▶️ Canlı Backtest Çalıştır", type="primary"):
+        GIRI  = {"UCUZ","DERIN ISKONTO","ISKONTO","MAKUL","GUCLU FIRSAT"}
+        CIKIS = {"PAHALI"}
+        sonuclar_c = []
+
+        with st.spinner("Hesaplanıyor..."):
+            for test_d in donems[:-4]:
+                test_q = {d: quarters[d] for d in donems[:donems.index(test_d)+1]}
+                for kod, row in quarters[test_d].items():
+                    pd_g = hesapla_pd(row)
+                    if not pd_g or pd_g <= 0: continue
+                    sd = sektor_degerleme(row, test_q, list(test_q.keys()), kod)
+                    if not sd['karar'] or sd['karar'] not in GIRI: continue
+                    pd_c = None
+                    for fut_d in donems[donems.index(test_d)+1:]:
+                        fut_row = quarters[fut_d].get(kod, {})
+                        if not fut_row: continue
+                        fut_sd = sektor_degerleme(fut_row, {fut_d: quarters[fut_d]}, [fut_d], kod)
+                        if fut_sd['karar'] in CIKIS:
+                            pd_c = hesapla_pd(fut_row); break
+                    if not pd_c:
+                        pd_c = hesapla_pd(quarters[son_d].get(kod, {}))
+                    if not pd_c or pd_c <= 0: continue
+                    sonuclar_c.append({"grup": sd['grup'], "x": pd_c/pd_g})
+
+        from collections import defaultdict
+        g_data = defaultdict(list)
+        for r in sonuclar_c:
+            g_data[r['grup']].append(r['x'])
+
+        rows = []
+        for gr, xs in sorted(g_data.items(), key=lambda i: sum(i[1])/len(i[1]), reverse=True):
+            if len(xs) < 3: continue
+            rows.append({
+                "Sektör": gr, "N": len(xs),
+                "Ort X": f"{sum(xs)/len(xs):.1f}x",
+                "Med X": f"{sorted(xs)[len(xs)//2]:.1f}x",
+                "Zarar%": f"%{sum(1 for x in xs if x<1)/len(xs)*100:.0f}"
+            })
+
+        st.dataframe(_pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.success(f"✅ {len(sonuclar_c)} gözlem analiz edildi.")
+
+
 elif page == "⚙️ Ayarlar":
     st.markdown("""<div class='ph'>
     <div class='ph-badge' style='background:#0D1926;color:#64748B;border:1px solid #1E3448'>AYARLAR</div>

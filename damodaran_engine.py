@@ -170,16 +170,16 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
         ns_buy_d = safe_float(quarters[donems[-1]].get(kod,{}).get(C_NS_BUY,""))
         if son_roe and son_roe >= 20 and (ns_buy_d or 0) >= 20:
             asama, label, emoji, renk = 3, "Yuksek Buyume", "🚀", "#4ADE80"
-            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} + buyume {ns_buy_d:.0f}%" if ns_buy_d else f"ROE %{son_roe:.0f} yuksek"
+            metrik, aciklama = "PD/DD", (f"ROE %{round(son_roe,0)} + buyume %{round(ns_buy_d,0)}" if ns_buy_d else f"ROE %{round(son_roe,0)} yuksek")
         elif son_roe and son_roe >= 15:
             asama, label, emoji, renk = 4, "Olgun Buyume", "💪", "#A78BFA"
-            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} stabil"
+            metrik, aciklama = "PD/DD", f"ROE %{round(son_roe,0) if son_roe is not None else 0} stabil"
         elif son_roe and son_roe >= 8:
             asama, label, emoji, renk = 5, "Olgun/Stabil", "🏛️", "#FCD34D"
-            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} dusuk"
+            metrik, aciklama = "PD/DD", f"ROE %{round(son_roe,0) if son_roe is not None else 0} dusuk"
         else:
             asama, label, emoji, renk = 6, "Dusus", "📉", "#F87171"
-            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f if son_roe is not None else 0} zayif"
+            metrik, aciklama = "PD/DD", f"ROE %{round(son_roe,0) if son_roe is not None else 0} zayif"
         return {"asama": asama, "label": label, "emoji": emoji, "renk": renk,
                 "metrik": metrik, "aciklama": aciklama,
                 "ns_buy": ns_buy_d, "marj_son": None, "marj_trend": 0,
@@ -195,7 +195,7 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
         else:
             asama, label, emoji, renk = 5, "Olgun/Stabil", "🏛️", "#FCD34D"
         return {"asama": asama, "label": label, "emoji": emoji, "renk": renk,
-                "metrik": "PD/DD", "aciklama": f"PD/DD {pddd:.2f}x" if pddd else "GYO",
+                "metrik": "PD/DD", "aciklama": (f"PD/DD {round(pddd,2)}x" if pddd else "GYO"),
                 "ns_buy": ns_buy_d, "marj_son": None, "marj_trend": 0,
                 "yy_buy": None, "efk_poz": 75, "son_roic": None}
 

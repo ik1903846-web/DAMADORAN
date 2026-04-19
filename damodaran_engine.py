@@ -157,6 +157,48 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
     if not marj_direkt and len(efk_s) >= 1 and len(ns_s) >= 1 and ns_s[-1] and ns_s[-1] > 0:
         marj_direkt = (efk_s[-1] / ns_s[-1]) * 100
 
+    # Finansal firmalar için ozel yasam dongusu
+    _sektor = quarters[donems[-1]].get(kod, {}).get(C_SEKTOR, "")
+    _grup = sektor_grubu(_sektor) if _sektor else "DIGER"
+
+    if _grup in ["BANKA", "SIGORTA"]:
+        # Banka/Sigorta: ROE trendi ile aşama tespiti
+        roe_s = [safe_float(quarters[d].get(kod,{}).get(C_ROE,"")) for d in donems]
+        roe_s = [v for v in roe_s if v is not None]
+        son_roe = roe_s[-1] if roe_s else None
+        roe_trend = (sum(roe_s[-4:])/4 - sum(roe_s[-8:-4])/4) if len(roe_s) >= 8 else 0
+        ns_buy_d = safe_float(quarters[donems[-1]].get(kod,{}).get(C_NS_BUY,""))
+        if son_roe and son_roe >= 20 and (ns_buy_d or 0) >= 20:
+            asama, label, emoji, renk = 3, "Yuksek Buyume", "🚀", "#4ADE80"
+            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} + buyume {ns_buy_d:.0f}%" if ns_buy_d else f"ROE %{son_roe:.0f} yuksek"
+        elif son_roe and son_roe >= 15:
+            asama, label, emoji, renk = 4, "Olgun Buyume", "💪", "#A78BFA"
+            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} stabil"
+        elif son_roe and son_roe >= 8:
+            asama, label, emoji, renk = 5, "Olgun/Stabil", "🏛️", "#FCD34D"
+            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} dusuk"
+        else:
+            asama, label, emoji, renk = 6, "Dusus", "📉", "#F87171"
+            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f if son_roe else 0} zayif"
+        return {"asama": asama, "label": label, "emoji": emoji, "renk": renk,
+                "metrik": metrik, "aciklama": aciklama,
+                "ns_buy": ns_buy_d, "marj_son": None, "marj_trend": 0,
+                "yy_buy": None, "efk_poz": 100, "son_roic": None}
+
+    if _grup == "GYO":
+        pddd = safe_float(quarters[donems[-1]].get(kod,{}).get(C_PDDD,""))
+        ns_buy_d = safe_float(quarters[donems[-1]].get(kod,{}).get(C_NS_BUY,""))
+        if pddd and pddd < 0.7 and (ns_buy_d or 0) > 10:
+            asama, label, emoji, renk = 3, "Yuksek Buyume", "🚀", "#4ADE80"
+        elif pddd and pddd < 1.2:
+            asama, label, emoji, renk = 4, "Olgun Buyume", "💪", "#A78BFA"
+        else:
+            asama, label, emoji, renk = 5, "Olgun/Stabil", "🏛️", "#FCD34D"
+        return {"asama": asama, "label": label, "emoji": emoji, "renk": renk,
+                "metrik": "PD/DD", "aciklama": f"PD/DD {pddd:.2f}x" if pddd else "GYO",
+                "ns_buy": ns_buy_d, "marj_son": None, "marj_trend": 0,
+                "yy_buy": None, "efk_poz": 75, "son_roic": None}
+
     if len(ns_s) < 4 or len(efk_s) < 4:
         # Tek dönem — direkt kolonlarla minimal analiz
         ns_buy  = ns_buy_direkt
@@ -510,54 +552,69 @@ def risk_analizi(row: dict, yd: dict) -> dict:
 
 
 # ── MODÜL 6: NIHAI KARAR ────────────────────────────────────────────────────
-def nihai_karar(yd: dict, uc_p: dict, fiyat: dict, risk: dict) -> dict:
+def nihai_karar(yd: dict, uc_p: dict, fiyat: dict, risk: dict, sektor_d: dict = None) -> dict:
     """
-    Damodaran Karar Çerçevesi:
-    Guvenlik marji + Risk seviyesi + 3P puani + Yasam dongusu kombinasyonu
+    Damodaran Karar Cercevesi — Sektore Ozel
+    Her sektör kendi dogru metrigine gore karar verir.
     """
-    gm        = fiyat.get("guvenlik_marji")
     risk_puan = risk.get("toplam_risk", 50)
     uc_p_puan = uc_p.get("toplam", 0)
     asama     = yd.get("asama")
-    karar_sinyal = fiyat.get("karar_sinyal")
+    grup      = (sektor_d or {}).get("grup", "DIGER")
+    sk_karar  = (sektor_d or {}).get("karar")
 
-    if gm is None:
-        return {"karar": "VERi YOK", "puan": 0, "renk": "#475569", "aciklama": "Icsel deger hesaplanamadi."}
-
-    # Temel puan
+    # ── SEKTORE OZEL PUAN HESABI ────────────────────────────────────────────
     puan = 50
 
-    # Guvenlik marji etkisi
-    puan += gm * 0.5
+    # 1. Sektör değerleme puanı (ana kriter)
+    SEKTOR_PUAN = {
+        "UCUZ":          +30,
+        "DERIN ISKONTO": +35,
+        "GUCLU FIRSAT":  +30,
+        "ISKONTO":       +20,
+        "MAKUL":         +10,
+        "ADIL":           0,
+        "PAHALI":        -25,
+    }
+    puan += SEKTOR_PUAN.get(sk_karar, 0)
 
-    # Risk duzeltmesi (yuksek risk puani dusuruyor)
+    # 2. Finansal firmalar (Banka/Sigorta/GYO/Holding) — DCF yerine sektör metriği kullan
+    FIN_GRUPLAR = {"BANKA", "SIGORTA", "GYO", "HOLDING", "YATIRIM"}
+    if grup in FIN_GRUPLAR:
+        # Bu sektörler için DCF güvenlik marjı kullanma — sadece sektör metrigi
+        gm = None  # DCF bypass
+        aciklama_on = f"Sektör Modeli: {(sektor_d or {}).get('model','')} | "
+    else:
+        # Standart sektörler için DCF de ekle
+        gm = fiyat.get("guvenlik_marji")
+        if gm is not None:
+            puan += gm * 0.3  # DCF etkisi daha az ağırlıklı
+        aciklama_on = f"DCF GM: {f'{gm:.0f}' if gm is not None else '-'}% | "
+
+    # 3. Risk düzeltmesi
     puan -= (risk_puan - 50) * 0.3
 
-    # 3P etkisi
-    puan += (uc_p_puan - 50) * 0.2
+    # 4. 3P etkisi
+    puan += (uc_p_puan - 50) * 0.15
 
-    # Asama bonusu (erken asama = potansiyel)
-    asama_bonus = {2: 10, 3: 8, 4: 3, 5: -2, 6: -10, 1: -5}
+    # 5. Yaşam döngüsü bonusu
+    asama_bonus = {2: 12, 3: 8, 4: 3, 5: 0, 6: -8, 1: -5}
     puan += asama_bonus.get(asama, 0)
 
     puan = max(0, min(100, puan))
 
-    if puan >= 75:
-        karar, renk = "GUCLU AL 🟢", "#4ADE80"
-    elif puan >= 60:
-        karar, renk = "AL 🟢", "#86EFAC"
-    elif puan >= 45:
-        karar, renk = "TUT / iZLE 🟡", "#FCD34D"
-    elif puan >= 30:
-        karar, renk = "DiKKATLi 🟠", "#FB923C"
-    else:
-        karar, renk = "PAHALI / KACIN 🔴", "#F87171"
+    if puan >= 75:   karar, renk = "GUCLU AL 🟢", "#4ADE80"
+    elif puan >= 60: karar, renk = "AL 🟢",        "#86EFAC"
+    elif puan >= 45: karar, renk = "TUT / iZLE 🟡","#FCD34D"
+    elif puan >= 30: karar, renk = "DiKKATLi 🟠",  "#FB923C"
+    else:            karar, renk = "PAHALI / KACIN 🔴","#F87171"
 
     aciklama = (
-        f"Guvenlik Marji: {gm:.0f}% | "
+        aciklama_on +
         f"Risk: {risk.get('seviye','?')} | "
         f"3P: {uc_p_puan}/99 | "
-        f"Asama: {yd.get('label','?')}"
+        f"Asama: {yd.get('label','?')} | "
+        f"Sektör: {sk_karar or '-'}"
     )
 
     return {"karar": karar, "puan": round(puan, 0), "renk": renk, "aciklama": aciklama}
@@ -569,15 +626,14 @@ def tam_analiz(kod: str, quarters: dict, donems: list) -> dict:
     row = quarters[donems[-1]].get(kod, {})
     if not row: return {}
 
-    yd    = yasam_dongusu(quarters, donems, kod)
-    uc_p  = uc_p_testi(row, yd)
-    icsel = icsel_deger_hesapla(row, quarters, donems, kod, yd)
-    fiyat = fiyat_deger_analizi(row, icsel)
-    risk  = risk_analizi(row, yd)
-    karar = nihai_karar(yd, uc_p, fiyat, risk)
-
-    firsat  = firsat_skoru(row, yd, quarters, donems, kod)
+    yd       = yasam_dongusu(quarters, donems, kod)
+    uc_p     = uc_p_testi(row, yd)
+    icsel    = icsel_deger_hesapla(row, quarters, donems, kod, yd)
+    fiyat    = fiyat_deger_analizi(row, icsel)
+    risk     = risk_analizi(row, yd)
     sektor_d = sektor_degerleme(row, quarters, donems, kod)
+    karar    = nihai_karar(yd, uc_p, fiyat, risk, sektor_d)
+    firsat   = firsat_skoru(row, yd, quarters, donems, kod)
 
     return {
         "kod": kod,

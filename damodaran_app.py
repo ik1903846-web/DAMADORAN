@@ -335,7 +335,9 @@ elif page == "🏠 Genel Bakis":
         bt_cols = st.columns(8)
         for i, s in enumerate(en_iyi[:16]):
             with bt_cols[i % 8]:
-                if st.button(s['kod'], key=f"gb_{s['kod']}"):
+                ka = s['karar']['karar']
+                ka_k = "🟢" if "GUCLU AL" in ka or "AL 🟢" in ka else "🟡" if "TUT" in ka else "🔴" if "PAHALI" in ka else "🟠"
+                if st.button(f"{s['kod']} {ka_k}", key=f"gb_{s['kod']}"):
                     git_detay(s['kod'])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -375,6 +377,7 @@ elif page == "🔄 Yasam Dongusu":
             "yy_buy": yd.get("yy_buy"), "efk_poz": yd.get("efk_poz"),
             "roic":   yd.get("son_roic"), "pd_val": pd_val,
             "aciklama": yd.get("aciklama",""),
+            "karar": "",
         })
 
     toplam = sum(len(v) for v in dagilim.values())
@@ -444,10 +447,13 @@ elif page == "🔄 Yasam Dongusu":
                 "PD": fmt_milyon(r["pd_val"]),
             } for r in liste])
             st.dataframe(df, hide_index=True, use_container_width=True, height=min(40+len(liste)*35, 450))
+            # Karar etiketli butonlar
             bt = st.columns(8)
             for i, r in enumerate(liste[:24]):
                 with bt[i%8]:
-                    if st.button(r["kod"], key=f"yd_{asama}_{r['kod']}"):
+                    ka = r.get("karar","")
+                    ka_kisa = "🟢AL" if "GUCLU AL" in ka or (ka=="AL" ) else "🟡TUT" if "TUT" in ka else "🔴KAC" if "PAHALI" in ka or "KACIN" in ka else "🟠DİK" if "DiKKATLi" in ka else ""
+                    if st.button(f"{r['kod']} {ka_kisa}", key=f"yd_{asama}_{r['kod']}"):
                         git_detay(r["kod"])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -736,7 +742,7 @@ elif page == "📊 Detay Analizi":
             f"<div style='background:#0D1926;border:1px solid {renk_gm};border-radius:10px;padding:14px'>"
             f"<div style='font-size:10px;color:#475569;text-transform:uppercase'>DCF Degerleme</div>"
             f"<div style='font-size:22px;font-weight:800;color:{renk_gm};margin:6px 0'>"
-            f"{'+' if gm and gm>0 else ''}{gm:.0f}% GM</div>"
+            f"{'+' if gm and gm>0 else ''}{round(gm,0) if gm is not None else '-'}% GM</div>"
             f"<div style='font-size:10px;color:#64748B'>"
             f"PD: {fiyat.get('pd_fmt','-')}<br>"
             f"İcsel: {fiyat.get('id_fmt','-')}<br>"

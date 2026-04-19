@@ -1,3 +1,4 @@
+
 """
 Damodaran Yatirim Sistemi — Engine
 Kaynak: The Corporate Life Cycle (2024) + Investment Valuation

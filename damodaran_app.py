@@ -73,12 +73,12 @@ with st.sidebar:
     st.markdown("<div class='sb-sub'>Kurumsal Yasam Dongusu · DCF · Risk</div>", unsafe_allow_html=True)
 
     if st.session_state.aktif_sayfa:
-        idx = SAYFALAR.index(st.session_state.aktif_sayfa) if st.session_state.aktif_sayfa in SAYFALAR else 0
+        _idx = SAYFALAR.index(st.session_state.aktif_sayfa) if st.session_state.aktif_sayfa in SAYFALAR else 0
         st.session_state.aktif_sayfa = None
     else:
-        idx = 0
+        _idx = 0
 
-    page = st.radio("", SAYFALAR, index=idx, label_visibility="collapsed", key="page_radio")
+    page = st.radio("", SAYFALAR, index=_idx, label_visibility="collapsed", key="page_radio")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -438,14 +438,20 @@ elif page == "🔄 Yasam Dongusu":
             if not liste:
                 st.info("Bu asamada hisse yok.")
                 continue
-            df = pd.DataFrame([{
-                "Kod": r["kod"], "Sektor": r["sektor"][:20],
-                "NS Buy%": round(r["ns_buy"],0) if r.get("ns_buy") is not None else None,
-                "Marj%": round(r["marj"],0) if r.get("marj") is not None else None,
-                "ROIC": round(r["roic"],0) if r.get("roic") is not None else None,
-                "EFK ist%": round(r["efk_poz"],0) if r.get("efk_poz") is not None else None,
-                "PD": fmt_milyon(r["pd_val"]),
-            } for r in liste])
+            import pandas as _pdd
+            df_rows = []
+            for r in liste:
+                df_rows.append({
+                    "Kod":      r["kod"],
+                    "Sektor":   r["sektor"][:20] if r.get("sektor") else "",
+                    "NS Buy%":  round(r["ns_buy"],1) if r.get("ns_buy") is not None else float("nan"),
+                    "Marj%":    round(r["marj"],1)   if r.get("marj")   is not None else float("nan"),
+                    "ROIC":     round(r["roic"],1)   if r.get("roic")   is not None else float("nan"),
+                    "EFK ist%": round(r["efk_poz"],0) if r.get("efk_poz") is not None else float("nan"),
+                    "PD_sayi":  r["pd_val"],
+                    "PD":       fmt_milyon(r["pd_val"]),
+                })
+            df = _pdd.DataFrame(df_rows)
             st.dataframe(df, hide_index=True, use_container_width=True, height=min(40+len(liste)*35, 450))
             # Karar etiketli butonlar
             bt = st.columns(8)
@@ -536,18 +542,18 @@ elif page == "🔍 Hisse Tarayici":
     st.markdown(f"<p style='font-size:11px;color:#475569'>{len(sonuclar)} hisse bulundu</p>", unsafe_allow_html=True)
 
     if sonuclar:
-        df = pd.DataFrame([{
-            "Kod":     s['kod'],
-            "Sektor":  s['sektor'][:20],
-            "Asama":   f"{s['yasam_dongusu'].get('emoji','')} {s['yasam_dongusu'].get('label','')[:10]}",
-            "PD":      s['fiyat'].get('pd_fmt','-'),
-            "İcsel D": s['fiyat'].get('id_fmt','-'),
-            "GM%":     s['fiyat'].get('guvenlik_marji'),
-            "WACC%":   s['icsel'].get('wacc'),
-            "3P":      s['uc_p'].get('toplam'),
-            "Risk":    s['risk'].get('seviye'),
-            "Karar":   s['karar']['karar'][:12],
-            "Puan":    s['karar']['puan'],
+        import pandas as _pdtr
+        df = _pdtr.DataFrame([{
+            "Kod":          s['kod'],
+            "Sektor":       (s['sektor'] or "")[:18],
+            "Asama":        f"{s['yasam_dongusu'].get('emoji','')} {s['yasam_dongusu'].get('label','')[:10]}",
+            "Sektör Karar": s.get("sektor_d",{}).get("karar") or "-",
+            "PD (M TL)":    round((s['fiyat'].get('pd_val') or 0)/1e6, 1),
+            "GM%":          round(s['fiyat'].get('guvenlik_marji') or 0, 1) if s['fiyat'].get('guvenlik_marji') is not None else float("nan"),
+            "Risk":         s['risk'].get('seviye','-'),
+            "Fırsat":       s.get('firsat',{}).get('puan',0),
+            "Karar":        s['karar']['karar'][:12],
+            "Puan":         s['karar']['puan'],
         } for s in sonuclar])
         # İki görünüm: Liste ve Sektör Bazlı
         gorsel_tab, sektor_tab = st.tabs(["📋 Liste Görünümü", "🏢 Sektör Bazlı Görünüm"])
@@ -652,7 +658,10 @@ elif page == "📊 Detay Analizi":
     if hisse_git: st.session_state.hisse_git = None
     tum_kodlar = sorted(quarters[son_d].keys())
     baslangic  = tum_kodlar.index(hisse_git) if hisse_git and hisse_git in tum_kodlar else 0
-    secilen    = st.selectbox("Hisse Seç", tum_kodlar, index=baslangic)
+    secilen    = st.selectbox("Hisse Seç", tum_kodlar, index=baslangic, key="detay_hisse_sec")
+    # Hisse değişince page state'i koru
+    if "detay_hisse_sec" in st.session_state:
+        pass  # page state korunur
 
     sonuc = tam_analiz(secilen, quarters, donems)
     if not sonuc:

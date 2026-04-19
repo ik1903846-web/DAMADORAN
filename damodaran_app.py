@@ -462,33 +462,71 @@ elif page == "🔍 Hisse Tarayici":
 
     if not quarters: bos(); st.stop()
 
-    # Filtreler
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        asama_filtre = st.multiselect("Yaşam Aşaması", [1,2,3,4,5,6],
+    # Filtreler — Sektöre Özel
+    st.markdown(
+        "<div style='background:#071A0F;border:1px solid #166534;border-radius:8px;"
+        "padding:10px 16px;margin-bottom:12px;font-size:11px;color:#4ADE80'>"
+        "🎯 <b>Sektöre Özel Tarama</b> — Her hisse kendi sektörünün Damodaran modeline göre değerleniyor. "
+        "Banka → PD/DD×ROE · GYO → PD/DD · Teknoloji → FV/Satış · Diğerleri → FV/FAVÖK</div>",
+        unsafe_allow_html=True
+    )
+
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        sektor_filtre = st.multiselect(
+            "Sektör Grubu",
+            list(SEKTOR_META.keys()),
+            format_func=lambda x: f"{SEKTOR_META[x]['emoji']} {SEKTOR_META[x]['label']}",
+            placeholder="Tümü"
+        )
+    with f2:
+        sektor_karar_filtre = st.multiselect(
+            "Sektör Değerleme",
+            ["UCUZ", "DERIN ISKONTO", "ISKONTO", "GUCLU FIRSAT", "MAKUL", "ADIL", "PAHALI"],
+            default=["UCUZ", "DERIN ISKONTO", "ISKONTO", "GUCLU FIRSAT"],
+        )
+    with f3:
+        asama_filtre = st.multiselect(
+            "Yaşam Aşaması", [1,2,3,4,5,6],
             format_func=lambda x: {1:"🌱 Baslangic",2:"🧒 Genc",3:"🚀 Yuksek Buy",
                                     4:"💪 Olgun Buy",5:"🏛️ Stabil",6:"📉 Dusus"}[x],
-            default=[2,3])
-    with c2:
-        min_gm = st.slider("Min Güvenlik Marjı (%)", -100, 100, 0)
-    with c3:
-        risk_filtre = st.multiselect("Risk", ["DUSUK","ORTA","YUKSEK"], default=["DUSUK","ORTA"])
+            placeholder="Tümü"
+        )
+    with f4:
+        risk_filtre = st.multiselect(
+            "Risk", ["DUSUK","ORTA","YUKSEK"],
+            default=["DUSUK","ORTA"]
+        )
 
-    with st.spinner("Analiz yapiliyor..."):
+    with st.spinner("Sektöre özel analiz yapiliyor..."):
         sonuclar = []
         for kod, row in quarters[son_d].items():
             s = tam_analiz(kod, quarters, donems)
             if not s: continue
-            gm = s['fiyat'].get('guvenlik_marji')
-            if gm is None: continue
+
+            sd = s.get('sektor_d', {})
             a  = s['yasam_dongusu'].get('asama')
             rv = s['risk'].get('seviye')
+            sk = sd.get('karar')
+            sg = sd.get('grup')
+
+            # Sektör grubu filtresi
+            if sektor_filtre and sg not in sektor_filtre: continue
+            # Sektör değerleme filtresi (ana filtre)
+            if sektor_karar_filtre and sk not in sektor_karar_filtre: continue
+            # Yaşam aşaması
             if asama_filtre and a not in asama_filtre: continue
-            if gm < min_gm: continue
+            # Risk
             if risk_filtre and rv not in risk_filtre: continue
+
             sonuclar.append(s)
 
-    sonuclar.sort(key=lambda x: x['karar']['puan'], reverse=True)
+    # Sektör değerleme öncelikli sıralama
+    SEKTOR_ONCELIK = {"UCUZ":1,"DERIN ISKONTO":1,"GUCLU FIRSAT":1,"ISKONTO":2,"MAKUL":3,"ADIL":4,"PAHALI":5}
+    sonuclar.sort(key=lambda x: (
+        SEKTOR_ONCELIK.get(x.get('sektor_d',{}).get('karar',''), 6),
+        -x['karar']['puan']
+    ))
     st.markdown(f"<p style='font-size:11px;color:#475569'>{len(sonuclar)} hisse bulundu</p>", unsafe_allow_html=True)
 
     if sonuclar:
@@ -505,13 +543,84 @@ elif page == "🔍 Hisse Tarayici":
             "Karar":   s['karar']['karar'][:12],
             "Puan":    s['karar']['puan'],
         } for s in sonuclar])
-        st.dataframe(df, hide_index=True, use_container_width=True, height=500)
+        # İki görünüm: Liste ve Sektör Bazlı
+        gorsel_tab, sektor_tab = st.tabs(["📋 Liste Görünümü", "🏢 Sektör Bazlı Görünüm"])
 
-        bt = st.columns(8)
-        for i, s in enumerate(sonuclar[:24]):
-            with bt[i%8]:
-                if st.button(s['kod'], key=f"tr_{s['kod']}"):
-                    git_detay(s['kod'])
+        with gorsel_tab:
+            st.dataframe(df, hide_index=True, use_container_width=True, height=500)
+            bt = st.columns(8)
+            for i, s in enumerate(sonuclar[:24]):
+                with bt[i%8]:
+                    if st.button(s['kod'], key=f"tr_{s['kod']}"):
+                        git_detay(s['kod'])
+
+        with sektor_tab:
+            # Sektörlere göre grupla
+            from collections import defaultdict as _dd
+            sektor_gruplari = _dd(list)
+            for s in sonuclar:
+                sg = s.get('sektor_d', {}).get('grup', 'DIGER')
+                sektor_gruplari[sg].append(s)
+
+            # Her sektörü ayrı bölüm olarak göster
+            for grup, liste in sorted(sektor_gruplari.items(), key=lambda x: -len(x[1])):
+                if not liste: continue
+                meta = SEKTOR_META.get(grup, {"emoji":"🏭","label":grup,"model":"-","acik":""})
+                renk_map = {
+                    "UCUZ":"#4ADE80","DERIN ISKONTO":"#4ADE80","GUCLU FIRSAT":"#4ADE80",
+                    "ISKONTO":"#86EFAC","MAKUL":"#FCD34D","ADIL":"#94A3B8","PAHALI":"#F87171"
+                }
+                ucuz_say = sum(1 for s in liste if s.get('sektor_d',{}).get('karar') in
+                               {"UCUZ","DERIN ISKONTO","ISKONTO","GUCLU FIRSAT"})
+
+                st.markdown(
+                    f"<div style='background:#0D1926;border:1px solid #0F2040;"
+                    f"border-radius:10px;padding:14px 18px;margin-bottom:4px'>"
+                    f"<div style='display:flex;align-items:center;justify-content:space-between'>"
+                    f"<div style='display:flex;align-items:center;gap:10px'>"
+                    f"<span style='font-size:22px'>{meta['emoji']}</span>"
+                    f"<div>"
+                    f"<div style='font-size:14px;font-weight:800;color:#E2E8F0'>{meta['label']}</div>"
+                    f"<div style='font-size:10px;color:#475569'>Model: {meta['model']} · {len(liste)} hisse</div>"
+                    f"</div></div>"
+                    f"<div style='text-align:right'>"
+                    f"<div style='font-size:18px;font-weight:800;color:#4ADE80'>{ucuz_say}</div>"
+                    f"<div style='font-size:9px;color:#475569'>ucuz/iskonto</div>"
+                    f"</div></div></div>",
+                    unsafe_allow_html=True
+                )
+
+                # Sektör içi tablo
+                import pandas as _pd2
+                df_s = _pd2.DataFrame([{
+                    "Kod":    s['kod'],
+                    "Sektör Karar": s.get('sektor_d',{}).get('karar') or '-',
+                    "Detay":  s.get('sektor_d',{}).get('detay','')[:30],
+                    "YD":     f"{s['yasam_dongusu'].get('emoji','')}{s['yasam_dongusu'].get('label','')[:10]}",
+                    "Risk":   s['risk'].get('seviye','-'),
+                    "Fırsat": f"{s.get('firsat',{}).get('puan',0)}/7",
+                    "PD":     s['fiyat'].get('pd_fmt','-'),
+                    "Karar":  s['karar']['karar'][:12],
+                    "Puan":   s['karar']['puan'],
+                } for s in sorted(liste,
+                    key=lambda x: {"UCUZ":0,"DERIN ISKONTO":0,"GUCLU FIRSAT":0,
+                                   "ISKONTO":1,"MAKUL":2,"ADIL":3,"PAHALI":4}.get(
+                        x.get('sektor_d',{}).get('karar',''),5))])
+
+                st.dataframe(df_s, hide_index=True, use_container_width=True,
+                             height=min(40 + len(liste)*35, 300))
+
+                # Detay butonları
+                bt2 = st.columns(8)
+                for i, s in enumerate(liste[:16]):
+                    sd_k = s.get('sektor_d',{}).get('karar','')
+                    renk_bt = renk_map.get(sd_k, "#94A3B8")
+                    with bt2[i%8]:
+                        if st.button(s['kod'], key=f"sb_{grup}_{s['kod']}",
+                                     help=f"{sd_k} | {s.get('sektor_d',{}).get('detay','')}"):
+                            git_detay(s['kod'])
+
+                st.markdown("<br>", unsafe_allow_html=True)
 
         # Excel
         buf = io.BytesIO()

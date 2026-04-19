@@ -419,6 +419,14 @@ elif page == "📊 Detay Analizi":
         f"</div>", unsafe_allow_html=True
     )
 
+    # Terim aciklamalari
+    ACIKLAMALAR = {
+        "Yasam Dongusu": "Damadoran 6 Asama: Sirketin buyume evresini gosterir. Erken asama = yuksek potansiyel.",
+        "3P Testi": "Possible + Plausible + Probable. Is modelinin gerceklesmesi ne kadar mumkun?",
+        "DCF Degerleme": "Gelecek nakit akislarinin bugunki degeri. Guvenlik Marji = (Icsel Deger - PD) / Icsel Deger",
+        "Risk": "Is riski + Buyume riski + Piyasa riski kombinasyonu. Dusuk = iyi.",
+    }
+
     # 4 Kolon: YD + 3P + ICsel Deger + Risk
     c1, c2, c3, c4 = st.columns(4)
 
@@ -481,6 +489,13 @@ elif page == "📊 Detay Analizi":
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>📐 DCF Parametreleri</h3>", unsafe_allow_html=True)
     dc1, dc2, dc3, dc4, dc5 = st.columns(5)
+    DCF_ACIK = {
+        "Büyüme Oranı": "Sirketin yasam dongusune gore beklenen yillik gelir artisi",
+        "WACC": "Agirlikli Ortalama Sermaye Maliyeti — kazancin en az bu kadar olmasi gerekir",
+        "Süre": "Bu buyume oraninin kac yil surdurulebilecegi tahmini",
+        "YY Oranı": "Kazancin yeni yatirima harcanan yuzdesI — yuksekse sirket buyumeye odakli",
+        "Terminal PV": "Analiz suresinin otesindeki tum nakit akislarinin bugunki degeri",
+    }
     for col, lbl, val in [
         (dc1, "Büyüme Oranı", f"%{icsel.get('buyume','?')}"),
         (dc2, "WACC",         f"%{icsel.get('wacc','?')}"),
@@ -491,13 +506,25 @@ elif page == "📊 Detay Analizi":
         col.markdown(
             f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:8px;padding:10px;text-align:center'>"
             f"<div style='font-size:9px;color:#475569;text-transform:uppercase'>{lbl}</div>"
-            f"<div style='font-size:18px;font-weight:700;color:#E2E8F0'>{val}</div></div>",
+            f"<div style='font-size:18px;font-weight:700;color:#E2E8F0'>{val}</div>"
+            f"<div style='font-size:8px;color:#1E3448;margin-top:4px'>{DCF_ACIK.get(lbl,'')}</div>"
+            f"</div>",
             unsafe_allow_html=True
         )
 
     # Temel finansal metrikler
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("<h3 style='color:#E2E8F0;font-size:14px;margin-bottom:8px'>📊 Temel Metrikler</h3>", unsafe_allow_html=True)
+    METRIK_ACIK = {
+        "ROIC":     "Yatirilan Sermaye Getirisi — yuksekse sirket sermayeyi verimli kullaniyor",
+        "ROE":      "Ozsermaye Karliligi — hissedara donen kar yuzdesi",
+        "Beta":     "Piyasaya gore risk — 1'den yuksekse piyasadan daha volatil",
+        "PEG":      "FK / Buyume orani — 1'in altiysa buyumeye gore ucuz",
+        "Piotroski":"Finansal saglik skoru 0-9 — 7 ve uzeri guclu",
+        "FV/FAVÖK": "Firma Degeri / FAVOK — dusukse ucuz, yuksekse pahali",
+        "PD/DD":    "Piyasa Degeri / Defter Degeri — 1'in altiysa varliklardan ucuz",
+        "Cari Oran":"Dongu Varlik / KV Borc — 1'in ustuyse kisa vade odeme gucu var",
+    }
     metrikler = [
         ("ROIC", safe_float(row.get('Roic','')), "%", "#4ADE80"),
         ("ROE", safe_float(row.get('Özsermaye Karlılığı (ROE) Yıllık (%)','')),"%" , "#38BDF8"),
@@ -514,7 +541,9 @@ elif page == "📊 Detay Analizi":
         col.markdown(
             f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:8px;padding:10px;text-align:center'>"
             f"<div style='font-size:9px;color:#475569;text-transform:uppercase'>{lbl}</div>"
-            f"<div style='font-size:16px;font-weight:700;color:{renk}'>{val_str}</div></div>",
+            f"<div style='font-size:16px;font-weight:700;color:{renk}'>{val_str}</div>"
+            f"<div style='font-size:8px;color:#1E3448;margin-top:4px'>{METRIK_ACIK.get(lbl,'')}</div>"
+            f"</div>",
             unsafe_allow_html=True
         )
 

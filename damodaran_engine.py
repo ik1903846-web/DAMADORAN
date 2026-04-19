@@ -179,7 +179,7 @@ def yasam_dongusu(quarters: dict, donems: list, kod: str) -> dict:
             metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f} dusuk"
         else:
             asama, label, emoji, renk = 6, "Dusus", "📉", "#F87171"
-            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f if son_roe else 0} zayif"
+            metrik, aciklama = "PD/DD", f"ROE %{son_roe:.0f if son_roe is not None else 0} zayif"
         return {"asama": asama, "label": label, "emoji": emoji, "renk": renk,
                 "metrik": metrik, "aciklama": aciklama,
                 "ns_buy": ns_buy_d, "marj_son": None, "marj_trend": 0,

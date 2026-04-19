@@ -576,6 +576,8 @@ def tam_analiz(kod: str, quarters: dict, donems: list) -> dict:
     risk  = risk_analizi(row, yd)
     karar = nihai_karar(yd, uc_p, fiyat, risk)
 
+    firsat = firsat_skoru(row, yd, quarters, donems, kod)
+
     return {
         "kod": kod,
         "sektor": row.get(C_SEKTOR, ''),
@@ -585,7 +587,109 @@ def tam_analiz(kod: str, quarters: dict, donems: list) -> dict:
         "fiyat": fiyat,
         "risk": risk,
         "karar": karar,
+        "firsat": firsat,
     }
 
 
 print("Damodaran Engine hazir!")
+
+
+# ── DAMODARAN FIRSAT SKORU ────────────────────────────────────────────────────
+def firsat_skoru(row: dict, yd: dict, quarters: dict, donems: list, kod: str) -> dict:
+    """
+    Damodaran 7 Firsat Sinyali
+    Her sinyal 1 puan — maksimum 7
+    """
+    sinyaller = []
+    asama    = yd.get("asama")
+    ns_buy   = yd.get("ns_buy")
+    marj     = yd.get("marj_son")
+    efk_poz  = yd.get("efk_poz", 0)
+    roic     = safe_float(row.get(C_ROIC, ""))
+    peg      = safe_float(row.get(C_PEG, ""))
+    pddd     = safe_float(row.get(C_PDDD, ""))
+    roe      = safe_float(row.get(C_ROE, ""))
+    piots    = safe_float(row.get(C_PIOTROSKI, ""))
+    pd_val   = hesapla_pd(row)
+    ns_son   = safe_float(row.get(C_NS, ""))
+
+    # 1. BAR MiTZVAH — Genc→Yuksek Buyume esiginde
+    if asama == 2 and ns_buy and ns_buy >= 30 and efk_poz >= 50:
+        sinyaller.append({
+            "kod": "BAR_MITZVAH",
+            "emoji": "🎓",
+            "baslik": "Bar Mitzvah Sinyali",
+            "aciklama": "Genc Buyume → Yuksek Buyume gecisinin esiginde. En erken ve en degerli yakalama noktasi."
+        })
+
+    # 2. ROIC > SERMAYE MALiYETi
+    wacc_tahmin = RISKSIZ_FAIZ * 100 + 5  # basit tahmin
+    if roic and roic > wacc_tahmin:
+        sinyaller.append({
+            "kod": "ROIC_POZITIF",
+            "emoji": "💎",
+            "baslik": "ROIC > Sermaye Maliyeti",
+            "aciklama": f"ROIC ({roic:.0f}%) sermaye maliyetinin ({wacc_tahmin:.0f}%) ustunde. Sirket deger URATIYOR."
+        })
+
+    # 3. DUSUK PEG
+    if peg and 0 < peg < 1.0:
+        sinyaller.append({
+            "kod": "PEG_DUSUK",
+            "emoji": "📈",
+            "baslik": "PEG < 1 — Buyumeye Gore Ucuz",
+            "aciklama": f"PEG {peg:.2f} — Buyume icin odenen fiyat dusuk. Damodaran bu kombinasyonu tercih eder."
+        })
+
+    # 4. SEKTORDE DUSUK CARPAN + YUKSEK TEMEL
+    # PD/DD dusuk ama ROE yuksek
+    if pddd and roe and pddd < 1.5 and roe > 15:
+        sinyaller.append({
+            "kod": "DUSUK_CARPAN_YUKSEK_TEMEL",
+            "emoji": "🎯",
+            "baslik": "Dusuk PD/DD + Yuksek ROE",
+            "aciklama": f"PD/DD {pddd:.1f}x ama ROE %{roe:.0f}. Piyasa bu karliligi fiyatlamis degil."
+        })
+
+    # 5. PIOTROSKI >= 7 (guclu finansal saglik)
+    if piots and piots >= 7:
+        sinyaller.append({
+            "kod": "PIOTROSKI_GUCLU",
+            "emoji": "🏆",
+            "baslik": "Piotroski 7+ — Guclu Finansal Saglik",
+            "aciklama": f"Piotroski skoru {piots:.0f}/9. Muhasebe kalitesi ve finansal guc dogrulanmis."
+        })
+
+    # 6. YüKSEK BUYUME + DUSUK PDNS (PD/Satis)
+    if ns_son and pd_val and ns_buy and ns_buy >= 30:
+        pdns = pd_val / ns_son if ns_son > 0 else None
+        if pdns and pdns < 1.0:
+            sinyaller.append({
+                "kod": "BUYUME_UCUZ",
+                "emoji": "🚀",
+                "baslik": "Hizli Buyume + PD/Satis < 1",
+                "aciklama": f"NS {ns_buy:.0f}% buyurken PD/Satis {pdns:.2f}x. Buyume fiyatlanmamis."
+            })
+
+    # 7. CONTRARIAN — Piyasanin terk ettigi ama temelli
+    son_d = donems[-1]
+    efk_s = [safe_float(quarters[d].get(kod, {}).get(C_EFK, "")) for d in donems]
+    efk_s = [v for v in efk_s if v is not None]
+    son_efk = efk_s[-1] if efk_s else None
+    if (asama == 6 and son_efk and son_efk > 0 and piots and piots >= 5):
+        sinyaller.append({
+            "kod": "CONTRARIAN",
+            "emoji": "🔄",
+            "baslik": "Contrarian — Piyasanin Gozden Cikardigi",
+            "aciklama": "Dusus asamasinda ama EFK pozitif ve Piotroski guclu. Piyasa asiri tepki vermis olabilir."
+        })
+
+    puan = len(sinyaller)
+    renk = "#4ADE80" if puan >= 4 else "#FCD34D" if puan >= 2 else "#94A3B8"
+
+    return {
+        "puan": puan,
+        "sinyaller": sinyaller,
+        "renk": renk,
+        "seviye": "GUCLU FIRSAT" if puan >= 4 else "FIRSAT" if puan >= 2 else "NORMAL"
+    }

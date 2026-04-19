@@ -507,7 +507,7 @@ elif page == "📊 Detay Analizi":
             f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:8px;padding:10px;text-align:center'>"
             f"<div style='font-size:9px;color:#475569;text-transform:uppercase'>{lbl}</div>"
             f"<div style='font-size:18px;font-weight:700;color:#E2E8F0'>{val}</div>"
-            f"<div style='font-size:8px;color:#1E3448;margin-top:4px'>{DCF_ACIK.get(lbl,'')}</div>"
+            f"<div style='font-size:9px;color:#475569;margin-top:4px;line-height:1.3'>{DCF_ACIK.get(lbl,'')}</div>"
             f"</div>",
             unsafe_allow_html=True
         )
@@ -542,7 +542,7 @@ elif page == "📊 Detay Analizi":
             f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:8px;padding:10px;text-align:center'>"
             f"<div style='font-size:9px;color:#475569;text-transform:uppercase'>{lbl}</div>"
             f"<div style='font-size:16px;font-weight:700;color:{renk}'>{val_str}</div>"
-            f"<div style='font-size:8px;color:#1E3448;margin-top:4px'>{METRIK_ACIK.get(lbl,'')}</div>"
+            f"<div style='font-size:9px;color:#475569;margin-top:4px;line-height:1.3'>{METRIK_ACIK.get(lbl,'')}</div>"
             f"</div>",
             unsafe_allow_html=True
         )

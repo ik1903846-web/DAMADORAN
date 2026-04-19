@@ -6,7 +6,7 @@ from datetime import datetime
 
 from damodaran_engine import (
     read_excel_bytes, donem_from_filename, fmt_milyon, safe_float,
-    tam_analiz, yasam_dongusu, uc_p_testi, icsel_deger_hesapla,
+    tam_analiz, firsat_skoru, yasam_dongusu, uc_p_testi, icsel_deger_hesapla,
     fiyat_deger_analizi, risk_analizi, nihai_karar, hesapla_pd,
     C_SEKTOR, C_NS_BUY, C_FAVOK_MRJ, C_ROIC, C_BETA, C_PEG,
     C_FV_FAVOK, C_PDDD, C_ROE, C_PIOTROSKI, C_BODE, C_CARI,
@@ -52,6 +52,7 @@ for k, v in [('quarters', {}), ('donems', []), ('son_donem', None),
     if k not in st.session_state: st.session_state[k] = v
 
 SAYFALAR = [
+    "📖 Tanitim",
     "🏠 Genel Bakis",
     "🔄 Yasam Dongusu",
     "🔍 Hisse Tarayici",
@@ -122,7 +123,121 @@ def bos():
 # ══════════════════════════════════════════════════════════════════════════════
 # SAYFA 1: GENEL BAKIS
 # ══════════════════════════════════════════════════════════════════════════════
-if page == "🏠 Genel Bakis":
+if page == "📖 Tanitim":
+    st.markdown("""<div class='ph'>
+    <div class='ph-badge' style='background:#0A1020;color:#A78BFA;border:1px solid #4C1D95'>HOŞGELDİNİZ</div>
+    <div class='ph-title'>Damodaran Yatırım Sistemi</div>
+    <div class='ph-sub'>Kurumsal Yasam Dongusu · DCF Degerleme · Risk Analizi · Firsat Tespiti</div>
+    </div>""", unsafe_allow_html=True)
+
+    # Damodaran alıntısı
+    st.markdown(
+        "<div style='background:#0A1020;border-left:4px solid #A78BFA;padding:16px 20px;border-radius:8px;margin-bottom:20px'>"
+        "<div style='font-size:14px;color:#E2E8F0;font-style:italic;line-height:1.7'>"
+        '"Bir hissedarin sinikliginin en iyi tanimi: Her seyin fiyatini bilen, '
+        "hicbir seyin degerini bilmeyen.' — Oscar Wilde<br><br>"
+        "Bu sistem sizi fiyatci degil, yatirmci yapar."
+        "</div><div style='font-size:11px;color:#475569;margin-top:8px'>— Damodaran, Investment Valuation</div></div>",
+        unsafe_allow_html=True
+    )
+
+    # Sistemin amacı
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(
+            "<div style='background:#0D1926;border:1px solid #0F2040;border-radius:12px;padding:18px'>"
+            "<div style='color:#4ADE80;font-size:14px;font-weight:800;margin-bottom:12px'>🎯 Bu Sistem Ne Yapar?</div>"
+            "<p style='color:#64748B;font-size:12px;line-height:1.8'>"
+            "• <b style='color:#E2E8F0'>Yasam Dongusunu</b> tespit eder — sirket buyume mi, olgunlasma mi, dusus mu?<br>"
+            "• <b style='color:#E2E8F0'>Icsel Degeri</b> hesaplar — DCF ile gercek deger nedir?<br>"
+            "• <b style='color:#E2E8F0'>Piyasa Fiyatini</b> karsilastirir — ucuz mu, pahali mi?<br>"
+            "• <b style='color:#E2E8F0'>Riski</b> olcer — is, buyume ve piyasa riski<br>"
+            "• <b style='color:#E2E8F0'>Firsatlari</b> isaretler — 7 Damodaran sinyali</p></div>",
+            unsafe_allow_html=True
+        )
+    with col2:
+        st.markdown(
+            "<div style='background:#0D1926;border:1px solid #0F2040;border-radius:12px;padding:18px'>"
+            "<div style='color:#38BDF8;font-size:14px;font-weight:800;margin-bottom:12px'>📖 Damodaran Ne Diyor?</div>"
+            "<p style='color:#64748B;font-size:12px;line-height:1.8'>"
+            "• Piyasalar hata yapar ama bu hatalar <b style='color:#E2E8F0'>pencereler halinde</b> acilip kapanir<br>"
+            "• <b style='color:#E2E8F0'>Duygu yok</b> — sadece sayilar ve hikaye<br>"
+            "• Iyi degerleme bir hikaye anlatir, iyi hikaye sayilarla desteklenir<br>"
+            "• Bir sey cok iyi gorunuyorsa <b style='color:#E2E8F0'>buyuk ihtimalle degil</b><br>"
+            "• Piyasanin her zaman dogru oldugunu varsay, sonra ikna et</p></div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Kullanim Akisi
+    st.markdown("<h3 style='color:#E2E8F0;font-size:15px;margin-bottom:12px'>🔄 Nasıl Kullanılır?</h3>", unsafe_allow_html=True)
+    adimlar = [
+        ("1", "#4ADE80", "Excel Yukle", "Sidebar'dan 25 donem Excel dosyalarini yukle. Ne kadar cok donem, o kadar isabetli analiz."),
+        ("2", "#38BDF8", "Yasam Dongusu", "🔄 Yasam Dongusu sekmesine gec. BIST'teki tum hisselerin 6 asamaya dagilimini gor. Bar Mitzvah adaylarini incele."),
+        ("3", "#A78BFA", "Firsat Tara", "🔍 Hisse Tarayici'da filtrele. Asama 2-3 + Dusuk Risk kombinasyonu Damodaran'in tercih ettigi penceredir."),
+        ("4", "#FCD34D", "Detay Analiz", "📊 Ilginc hisseleri Detay Analizi'nde incele. 4 kart + DCF + 7 Firsat Sinyali tam resmi goster."),
+        ("5", "#FB923C", "Takip Et", "Her donem yeni Excel yukle, asamasi degisen hisseleri izle. Buyume baslarken erken girmek hedeftir."),
+    ]
+    adim_cols = st.columns(5)
+    for (num, renk, baslik, acik), col in zip(adimlar, adim_cols):
+        col.markdown(
+            f"<div style='background:#0D1926;border:1px solid {renk};border-radius:10px;padding:14px;text-align:center;height:180px'>"
+            f"<div style='font-size:24px;font-weight:900;color:{renk}'>{num}</div>"
+            f"<div style='font-size:12px;font-weight:700;color:#E2E8F0;margin:6px 0'>{baslik}</div>"
+            f"<div style='font-size:10px;color:#475569;line-height:1.4'>{acik}</div></div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # 7 Fırsat Sinyali
+    st.markdown("<h3 style='color:#E2E8F0;font-size:15px;margin-bottom:12px'>🎯 7 Damodaran Fırsat Sinyali</h3>", unsafe_allow_html=True)
+    sinyaller = [
+        ("🎓", "Bar Mitzvah", "Genc Buyume asamasinda, EFK pozitife donuyor. En degerli gecis noktasi."),
+        ("💎", "ROIC > Maliyet", "Sirket sermayesini maliyetinin ustunde kullanabiliyor. Deger URATIYOR."),
+        ("📈", "PEG < 1", "Buyume icin odenen fiyat dusuk. Buyumeye gore ucuz."),
+        ("🎯", "Dusuk PD/DD + Yuksek ROE", "Defter degerinin altinda fiyat ama yuksek ozsermaye getirisi."),
+        ("🏆", "Piotroski 7+", "Finansal saglik ve muhasebe kalitesi dogrulanmis."),
+        ("🚀", "Buyume + PD/Satis<1", "Hizli buyurken satis bazinda ucuz. Piyasa buyumeyi fiyatlamamis."),
+        ("🔄", "Contrarian", "Dusus asamasinda ama EFK pozitif. Piyasa asiri tepki vermis."),
+    ]
+    s_cols = st.columns(7)
+    for (em, baslik, acik), col in zip(sinyaller, s_cols):
+        col.markdown(
+            f"<div style='background:#0D1926;border:1px solid #0F2040;border-radius:10px;padding:12px;text-align:center'>"
+            f"<div style='font-size:22px'>{em}</div>"
+            f"<div style='font-size:10px;font-weight:700;color:#E2E8F0;margin:6px 0'>{baslik}</div>"
+            f"<div style='font-size:9px;color:#475569;line-height:1.3'>{acik}</div></div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Damodaran 10 Kuralı
+    st.markdown("<h3 style='color:#E2E8F0;font-size:15px;margin-bottom:12px'>📜 Damodaran'ın 10 Kuralı</h3>", unsafe_allow_html=True)
+    kurallar = [
+        ("1", "Modeli degil, ilkeleri koruyun", "Model degisebilir ama temel prensipler degismez."),
+        ("2", "Piyasayi dinle, ona tapma", "Piyasa fiyatina saygi goster ama kole olma."),
+        ("3", "Risk degeri etkiler", "Belirsizlik arttikca beklenen getiri artmali."),
+        ("4", "Buyume bedavaya gelmez", "Yuksek buyume icin yuksek yatirim gerekir."),
+        ("5", "Her sey biter", "Buyume de sonunda yavaslayacak, bunu fiyatla."),
+        ("6", "Batma riskini goz ardi etme", "Bircok sirket hayatta kalamaz."),
+        ("7", "Degerleme önyargili olabilir", "Her analizde kendi duygularini kontrol et."),
+        ("8", "Basit modeller iyidir", "Karmasik model ≠ dogru analiz."),
+        ("9", "Hikaye + Sayi birlikte", "Rakamlar olmadan hikaye fantezi, hikaye olmadan rakam anlamsiz."),
+        ("10", "Hata yapilabilir", "Hatadan kork degil, süreci dogru yonet."),
+    ]
+    for num, baslik, acik in kurallar:
+        st.markdown(
+            f"<div style='display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid #0F2040'>"
+            f"<div style='font-size:14px;font-weight:900;color:#A78BFA;min-width:24px'>{num}</div>"
+            f"<div><div style='font-size:12px;font-weight:700;color:#E2E8F0'>{baslik}</div>"
+            f"<div style='font-size:11px;color:#475569'>{acik}</div></div></div>",
+            unsafe_allow_html=True
+        )
+
+elif page == "🏠 Genel Bakis":
     st.markdown("""<div class='ph'>
     <div class='ph-badge' style='background:#0A1020;color:#A78BFA;border:1px solid #4C1D95'>DAMODARAN</div>
     <div class='ph-title'>Genel Bakis</div>
@@ -185,6 +300,7 @@ if page == "🏠 Genel Bakis":
             "GM%":    s['fiyat'].get('guvenlik_marji', '-'),
             "Risk":   s['risk'].get('seviye', '-'),
             "Karar":  s['karar']['karar'][:12],
+            "Firsat": f"{s['firsat']['puan']}/7 {s['firsat']['seviye'][:6]}",
             "Puan":   s['karar']['puan'],
         } for s in en_iyi])
         st.dataframe(df_iyi, hide_index=True, use_container_width=True, height=500)
@@ -484,6 +600,26 @@ elif page == "📊 Detay Analizi":
             f"Piyasa: {risk.get('piyasa_risk','?')}/100</div>"
             f"</div>", unsafe_allow_html=True
         )
+
+    # Firsat Sinyalleri
+    firsat = sonuc.get("firsat", {})
+    if firsat.get("sinyaller"):
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='background:#0A1020;border:1px solid {firsat['renk']};border-radius:10px;padding:12px 16px;margin-bottom:12px'>"
+            f"<div style='color:{firsat['renk']};font-weight:800;font-size:13px'>🎯 Damodaran Firsat Sinyalleri: {firsat['puan']}/7 — {firsat['seviye']}</div></div>",
+            unsafe_allow_html=True
+        )
+        f_cols = st.columns(min(len(firsat["sinyaller"]), 4))
+        for i, s in enumerate(firsat["sinyaller"]):
+            with f_cols[i % 4]:
+                st.markdown(
+                    f"<div style='background:#0D1926;border:1px solid #4ADE80;border-radius:8px;padding:10px;margin-bottom:8px'>"
+                    f"<div style='font-size:18px'>{s['emoji']}</div>"
+                    f"<div style='font-size:11px;font-weight:700;color:#4ADE80'>{s['baslik']}</div>"
+                    f"<div style='font-size:9px;color:#475569;margin-top:4px'>{s['aciklama'][:80]}</div></div>",
+                    unsafe_allow_html=True
+                )
 
     # DCF Detay
     st.markdown("<hr>", unsafe_allow_html=True)
